@@ -12,6 +12,8 @@
 #pragma comment(lib, "MSWSock.lib")
 using namespace std;
 
+
+constexpr int VIEW_RANGE = 5;
 enum COMP_TYPE { OP_ACCEPT, OP_RECV, OP_SEND };
 class OVER_EXP {
 public:
@@ -47,6 +49,8 @@ public:
 	SOCKET _socket;
 	short	x, y;
 	char	_name[NAME_SIZE];
+	unordered_set <int> _view_list;
+	mutex	_vll;
 	int		_prev_remain;
 	int		_last_move_time;
 public:
@@ -91,6 +95,14 @@ public:
 	void send_add_player_packet(int c_id);
 	void send_remove_player_packet(int c_id)
 	{
+		_vll.lock();
+		if (0 == _view_list.count(c_id)) {
+			_vll.unlock();
+			return;
+		}
+		_view_list.erase(c_id);
+		_vll.unlock();
+
 		SC_REMOVE_PLAYER_PACKET p;
 		p.id = c_id;
 		p.size = sizeof(p);
@@ -103,6 +115,20 @@ array<SESSION, MAX_USER> clients;
 
 SOCKET g_s_socket, g_c_socket;
 OVER_EXP g_a_over;
+
+bool can_see(int a, int b)
+{
+
+	// int dist = sqrtf((clients[a].x - clients[b].x) * (clients[a].x - clients[b].x)
+	//	+ (clients[a].y - clients[b].y) * (clients[a].y - clients[b].y));
+	int dist_s = (clients[a].x - clients[b].x) * (clients[a].x - clients[b].x)
+		+ (clients[a].y - clients[b].y) * (clients[a].y - clients[b].y);
+
+	return VIEW_RANGE * VIEW_RANGE >= dist_s;
+
+	//if (abs(clients[a].x - clients[b].x) > VIEW_RANGE) return false;
+	//return abs(clients[a].y - clients[b].y) <= VIEW_RANGE;
+}
 
 void SESSION::send_move_packet(int c_id)
 {
@@ -118,6 +144,14 @@ void SESSION::send_move_packet(int c_id)
 
 void SESSION::send_add_player_packet(int c_id)
 {
+	_vll.lock();
+	if (0 != _view_list.count(c_id)) {
+		_vll.unlock();
+		return;
+	}
+	_view_list.insert(c_id);
+	_vll.unlock();
+
 	SC_ADD_PLAYER_PACKET add_packet;
 	add_packet.id = c_id;
 	strcpy_s(add_packet.name, clients[c_id]._name);
@@ -144,6 +178,8 @@ void process_packet(int c_id, char* packet)
 	case CS_LOGIN: {
 		CS_LOGIN_PACKET* p = reinterpret_cast<CS_LOGIN_PACKET*>(packet);
 		strcpy_s(clients[c_id]._name, p->name);
+		clients[c_id].x = rand() % W_WIDTH;
+		clients[c_id].y = rand() % W_HEIGHT;
 		clients[c_id].send_login_info_packet();
 		{
 			lock_guard<mutex> ll{ clients[c_id]._s_lock };
@@ -155,6 +191,8 @@ void process_packet(int c_id, char* packet)
 				if (ST_INGAME != pl._state) continue;
 			}
 			if (pl._id == c_id) continue;
+			if (false == can_see(pl._id, c_id)) continue;
+
 			pl.send_add_player_packet(c_id);
 			clients[c_id].send_add_player_packet(pl._id);
 		}
@@ -174,11 +212,36 @@ void process_packet(int c_id, char* packet)
 		clients[c_id].x = x;
 		clients[c_id].y = y;
 
+		clients[c_id]._vll.lock();
+		unordered_set<int> old_vl = clients[c_id]._view_list;
+		clients[c_id]._vll.unlock();
+		unordered_set<int> new_vl;
 		for (auto& cl : clients) {
 			if (cl._state != ST_INGAME) continue;
-			cl.send_move_packet(c_id);
-
+			if (cl._id == c_id) continue;
+			if (true == can_see(cl._id, c_id))
+				new_vl.insert(cl._id);
 		}
+		clients[c_id].send_move_packet(c_id);
+		// ADD_PLAYER
+		for (auto& cl : new_vl) {
+			if (0 == old_vl.count(cl)) {
+				clients[cl].send_add_player_packet(c_id);
+				clients[c_id].send_add_player_packet(cl);
+			}
+			else {
+				// MOVE_PLAYER
+				clients[cl].send_move_packet(c_id);
+			}
+		}
+		// REMOVE_PLAYER
+		for (auto& cl : old_vl) {
+			if (0 == new_vl.count(cl)) {
+				clients[cl].send_remove_player_packet(c_id);
+				clients[c_id].send_remove_player_packet(cl);
+			}
+		}
+
 	}
 	}
 }
@@ -191,6 +254,7 @@ void disconnect(int c_id)
 			if (ST_INGAME != pl._state) continue;
 		}
 		if (pl._id == c_id) continue;
+		if (false == can_see(pl._id, c_id)) continue;
 		pl.send_remove_player_packet(c_id);
 	}
 	closesocket(clients[c_id]._socket);
