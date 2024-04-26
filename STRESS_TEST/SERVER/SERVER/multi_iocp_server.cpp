@@ -4,8 +4,12 @@
 #include <MSWSock.h>
 #include <thread>
 #include <vector>
+#include <concurrent_vector.h>
+#include <concurrent_unordered_set.h>
 #include <mutex>
 #include <unordered_set>
+#include <list>
+#include <atomic>
 #include "protocol.h"
 
 #pragma comment(lib, "WS2_32.lib")
@@ -53,6 +57,8 @@ public:
 	mutex	_vll;
 	int		_prev_remain;
 	int		_last_move_time;
+
+	int now_sx, now_sy;
 public:
 	SESSION()
 	{
@@ -112,6 +118,31 @@ public:
 };
 
 array<SESSION, MAX_USER> clients;
+array<array< list<int>, 25>, 25> g_ObjectSector; // 16칸씩 sector를 잡음 
+mutex _sector;
+void insert_sector(int c_id)
+{
+	int sector_y = clients[c_id].now_sy = clients[c_id].y / 16;
+	int sector_x = clients[c_id].now_sx = clients[c_id].x / 16;
+	
+	_sector.lock();
+	g_ObjectSector[sector_y][sector_x].emplace_back(c_id);
+	_sector.unlock();
+}
+void delete_sector(int c_id)
+{
+	_sector.lock();
+	g_ObjectSector[clients[c_id].now_sy][clients[c_id].now_sx].remove(c_id);
+	_sector.unlock();
+}
+void update_sector(int c_id)
+{
+	if (clients[c_id].now_sy != clients[c_id].y / 16 || clients[c_id].now_sx != clients[c_id].x / 16)
+	{
+		delete_sector(c_id);
+		insert_sector(c_id);
+	}
+}
 
 SOCKET g_s_socket, g_c_socket;
 OVER_EXP g_a_over;
@@ -180,22 +211,33 @@ void process_packet(int c_id, char* packet)
 		strcpy_s(clients[c_id]._name, p->name);
 		clients[c_id].x = rand() % W_WIDTH;
 		clients[c_id].y = rand() % W_HEIGHT;
+
+		//생성 sector insert
+		insert_sector(c_id);
+		//
+
 		clients[c_id].send_login_info_packet();
 		{
 			lock_guard<mutex> ll{ clients[c_id]._s_lock };
 			clients[c_id]._state = ST_INGAME;
 		}
-		for (auto& pl : clients) {
-			{
-				lock_guard<mutex> ll(pl._s_lock);
-				if (ST_INGAME != pl._state) continue;
-			}
-			if (pl._id == c_id) continue;
-			if (false == can_see(pl._id, c_id)) continue;
 
-			pl.send_add_player_packet(c_id);
-			clients[c_id].send_add_player_packet(pl._id);
+		_sector.lock();
+		list<int> sector = g_ObjectSector[clients[c_id].now_sy][clients[c_id].now_sx];
+		_sector.unlock();
+		for (auto& sc : sector)
+		{
+			{
+				lock_guard<mutex> ll(clients[sc]._s_lock);
+				if (ST_INGAME != clients[sc]._state) continue;
+			}
+			if (sc == c_id) continue;
+			if (false == can_see(sc, c_id)) continue;
+
+			clients[sc].send_add_player_packet(c_id);
+			clients[c_id].send_add_player_packet(sc);
 		}
+
 		break;
 	}
 	case CS_MOVE: {
@@ -212,17 +254,28 @@ void process_packet(int c_id, char* packet)
 		clients[c_id].x = x;
 		clients[c_id].y = y;
 
+		//이동 sector update
+		update_sector(c_id);
+		//
+
 		clients[c_id]._vll.lock();
 		unordered_set<int> old_vl = clients[c_id]._view_list;
 		clients[c_id]._vll.unlock();
 		unordered_set<int> new_vl;
-		for (auto& cl : clients) {
-			if (cl._state != ST_INGAME) continue;
-			if (cl._id == c_id) continue;
-			if (true == can_see(cl._id, c_id))
-				new_vl.insert(cl._id);
+
+		_sector.lock();
+		list<int> sector = g_ObjectSector[clients[c_id].now_sy][clients[c_id].now_sx];
+		_sector.unlock();
+		for (auto& sc : sector)
+		{
+			if (clients[sc]._state != ST_INGAME) continue;
+			if (sc == c_id) continue;
+			if (true == can_see(sc, c_id))
+				new_vl.insert(sc);
 		}
+
 		clients[c_id].send_move_packet(c_id);
+
 		// ADD_PLAYER
 		for (auto& cl : new_vl) {
 			if (0 == old_vl.count(cl)) {
@@ -241,22 +294,32 @@ void process_packet(int c_id, char* packet)
 				clients[c_id].send_remove_player_packet(cl);
 			}
 		}
-
 	}
 	}
 }
 
 void disconnect(int c_id)
 {
-	for (auto& pl : clients) {
+	_sector.lock();
+	list<int> sector = g_ObjectSector[clients[c_id].now_sy][clients[c_id].now_sx];
+	_sector.unlock();
+
+	for (auto& sc : sector)
+	{
 		{
-			lock_guard<mutex> ll(pl._s_lock);
-			if (ST_INGAME != pl._state) continue;
+			lock_guard<mutex> ll(clients[sc]._s_lock);
+			if (ST_INGAME != clients[sc]._state) continue;
 		}
-		if (pl._id == c_id) continue;
-		if (false == can_see(pl._id, c_id)) continue;
-		pl.send_remove_player_packet(c_id);
+
+		if (sc == c_id) continue;
+		if (false == can_see(sc, c_id)) continue;
+		clients[sc].send_remove_player_packet(c_id);
 	}
+
+	//삭제 sector delete
+	delete_sector(c_id);
+	//
+
 	closesocket(clients[c_id]._socket);
 
 	lock_guard<mutex> ll(clients[c_id]._s_lock);
