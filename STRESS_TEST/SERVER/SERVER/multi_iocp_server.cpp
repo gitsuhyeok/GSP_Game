@@ -16,6 +16,7 @@
 #pragma comment(lib, "MSWSock.lib")
 using namespace std;
 
+bool _see_can = false;
 
 constexpr int VIEW_RANGE = 5;
 enum COMP_TYPE { OP_ACCEPT, OP_RECV, OP_SEND };
@@ -124,7 +125,7 @@ void insert_sector(int c_id)
 {
 	int sector_y = clients[c_id].now_sy = clients[c_id].y / 16;
 	int sector_x = clients[c_id].now_sx = clients[c_id].x / 16;
-	
+
 	_sector.lock();
 	g_ObjectSector[sector_y][sector_x].emplace_back(c_id);
 	_sector.unlock();
@@ -225,17 +226,35 @@ void process_packet(int c_id, char* packet)
 		_sector.lock();
 		list<int> sector = g_ObjectSector[clients[c_id].now_sy][clients[c_id].now_sx];
 		_sector.unlock();
-		for (auto& sc : sector)
+		if (_see_can)
 		{
+			for (auto& sc : sector)
 			{
-				lock_guard<mutex> ll(clients[sc]._s_lock);
-				if (ST_INGAME != clients[sc]._state) continue;
-			}
-			if (sc == c_id) continue;
-			if (false == can_see(sc, c_id)) continue;
+				{
+					lock_guard<mutex> ll(clients[sc]._s_lock);
+					if (ST_INGAME != clients[sc]._state) continue;
+				}
+				if (sc == c_id) continue;
+				if (false == can_see(sc, c_id))
+					continue;
 
-			clients[sc].send_add_player_packet(c_id);
-			clients[c_id].send_add_player_packet(sc);
+				clients[sc].send_add_player_packet(c_id);
+				clients[c_id].send_add_player_packet(sc);
+			}
+		}
+		else
+		{
+			for (auto& sc : sector)
+			{
+				{
+					lock_guard<mutex> ll(clients[sc]._s_lock);
+					if (ST_INGAME != clients[sc]._state) continue;
+				}
+				if (sc == c_id) continue;
+
+				clients[sc].send_add_player_packet(c_id);
+				clients[c_id].send_add_player_packet(sc);
+			}
 		}
 
 		break;
@@ -258,42 +277,57 @@ void process_packet(int c_id, char* packet)
 		update_sector(c_id);
 		//
 
-		clients[c_id]._vll.lock();
-		unordered_set<int> old_vl = clients[c_id]._view_list;
-		clients[c_id]._vll.unlock();
-		unordered_set<int> new_vl;
-
 		_sector.lock();
 		list<int> sector = g_ObjectSector[clients[c_id].now_sy][clients[c_id].now_sx];
 		_sector.unlock();
-		for (auto& sc : sector)
+
+		if (_see_can)
 		{
-			if (clients[sc]._state != ST_INGAME) continue;
-			if (sc == c_id) continue;
-			if (true == can_see(sc, c_id))
-				new_vl.insert(sc);
+			clients[c_id]._vll.lock();
+			unordered_set<int> old_vl = clients[c_id]._view_list;
+			clients[c_id]._vll.unlock();
+			unordered_set<int> new_vl;
+
+			for (auto& sc : sector)
+			{
+				if (clients[sc]._state != ST_INGAME) continue;
+				if (sc == c_id) continue;
+				if (true == can_see(sc, c_id))
+					new_vl.insert(sc);
+			}
+
+			clients[c_id].send_move_packet(c_id);
+
+			// ADD_PLAYER
+			for (auto& cl : new_vl) {
+				if (0 == old_vl.count(cl)) {
+					clients[cl].send_add_player_packet(c_id);
+					clients[c_id].send_add_player_packet(cl);
+				}
+				else {
+					// MOVE_PLAYER
+					clients[cl].send_move_packet(c_id);
+				}
+			}
+			// REMOVE_PLAYER
+			for (auto& cl : old_vl) {
+				if (0 == new_vl.count(cl)) {
+					clients[cl].send_remove_player_packet(c_id);
+					clients[c_id].send_remove_player_packet(cl);
+				}
+			}
+		}
+		else
+		{
+			for (auto& sc : sector)
+			{
+				if (clients[sc]._state != ST_INGAME) continue;
+
+				clients[sc].send_move_packet(c_id);
+			}
+
 		}
 
-		clients[c_id].send_move_packet(c_id);
-
-		// ADD_PLAYER
-		for (auto& cl : new_vl) {
-			if (0 == old_vl.count(cl)) {
-				clients[cl].send_add_player_packet(c_id);
-				clients[c_id].send_add_player_packet(cl);
-			}
-			else {
-				// MOVE_PLAYER
-				clients[cl].send_move_packet(c_id);
-			}
-		}
-		// REMOVE_PLAYER
-		for (auto& cl : old_vl) {
-			if (0 == new_vl.count(cl)) {
-				clients[cl].send_remove_player_packet(c_id);
-				clients[c_id].send_remove_player_packet(cl);
-			}
-		}
 	}
 	}
 }
@@ -304,16 +338,32 @@ void disconnect(int c_id)
 	list<int> sector = g_ObjectSector[clients[c_id].now_sy][clients[c_id].now_sx];
 	_sector.unlock();
 
-	for (auto& sc : sector)
+	if (_see_can)
 	{
+		for (auto& sc : sector)
 		{
-			lock_guard<mutex> ll(clients[sc]._s_lock);
-			if (ST_INGAME != clients[sc]._state) continue;
-		}
+			{
+				lock_guard<mutex> ll(clients[sc]._s_lock);
+				if (ST_INGAME != clients[sc]._state) continue;
+			}
 
-		if (sc == c_id) continue;
-		if (false == can_see(sc, c_id)) continue;
-		clients[sc].send_remove_player_packet(c_id);
+			if (sc == c_id) continue;
+			if (false == can_see(sc, c_id)) continue;
+			clients[sc].send_remove_player_packet(c_id);
+		}
+	}
+	else
+	{
+		for (auto& sc : sector)
+		{
+			{
+				lock_guard<mutex> ll(clients[sc]._s_lock);
+				if (ST_INGAME != clients[sc]._state) continue;
+			}
+
+			if (sc == c_id) continue;
+			clients[sc].send_remove_player_packet(c_id);
+		}
 	}
 
 	//ªË¡¶ sector delete
