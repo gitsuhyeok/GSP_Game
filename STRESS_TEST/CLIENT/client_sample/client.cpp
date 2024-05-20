@@ -150,6 +150,10 @@ void ProcessPacket(char* ptr)
 			players[id].show();
 		}
 		else {
+			players[id] = OBJECT{ *pieces, 64, 0, 64, 64 };
+			players[id].move(my_packet->x, my_packet->y);
+			players[id].set_name(my_packet->name);
+			players[id].show();
 			//npc[id - NPC_START].x = my_packet->x;
 			//npc[id - NPC_START].y = my_packet->y;
 			//npc[id - NPC_START].attr |= BOB_ATTR_VISIBLE;
@@ -169,6 +173,8 @@ void ProcessPacket(char* ptr)
 			players[other_id].move(my_packet->x, my_packet->y);
 		}
 		else {
+			players[other_id].move(my_packet->x, my_packet->y);
+
 			//npc[other_id - NPC_START].x = my_packet->x;
 			//npc[other_id - NPC_START].y = my_packet->y;
 		}
@@ -186,6 +192,7 @@ void ProcessPacket(char* ptr)
 			players.erase(other_id);
 		}
 		else {
+			players.erase(other_id);
 			//		npc[other_id - NPC_START].attr &= ~BOB_ATTR_VISIBLE;
 		}
 		break;

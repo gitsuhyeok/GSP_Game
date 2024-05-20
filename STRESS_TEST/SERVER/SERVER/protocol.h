@@ -2,10 +2,11 @@ constexpr int PORT_NUM = 4000;
 constexpr int BUF_SIZE = 200;
 constexpr int NAME_SIZE = 20;
 
-constexpr int MAX_USER = 30000;
+constexpr int MAX_USER = 5000;
+constexpr int NUM_NPC = 10000;
 
-constexpr int W_WIDTH = 400;
-constexpr int W_HEIGHT = 400;
+constexpr int W_WIDTH = 2000;
+constexpr int W_HEIGHT = 2000;
 
 // Packet ID
 constexpr char CS_LOGIN = 0;
@@ -15,6 +16,11 @@ constexpr char SC_LOGIN_INFO = 2;
 constexpr char SC_ADD_PLAYER = 3;
 constexpr char SC_REMOVE_PLAYER = 4;
 constexpr char SC_MOVE_PLAYER = 5;
+
+//클라에서 플레이어와 NPC의 비주얼을 구분하도록 하자.
+constexpr char VL_AVATAR = 0;
+constexpr char VL_PLAYER = 1;
+constexpr char VL_NPC = 2;
 
 #pragma pack (push, 1)
 struct CS_LOGIN_PACKET {
@@ -33,6 +39,7 @@ struct CS_MOVE_PACKET {
 struct SC_LOGIN_INFO_PACKET {
 	unsigned char size;
 	char	type;
+
 	short	id;
 	short	x, y;
 };
