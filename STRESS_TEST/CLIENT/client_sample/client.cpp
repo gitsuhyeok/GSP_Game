@@ -3,11 +3,8 @@
 #include <iostream>
 #include <unordered_map>
 #include <Windows.h>
+#include <chrono>
 using namespace std;
-
-//#pragma comment (lib, "opengl32.lib")
-//#pragma comment (lib, "winmm.lib")
-//#pragma comment (lib, "ws2_32.lib")
 
 #include "..\..\SERVER\SERVER\protocol.h"
 
@@ -33,13 +30,18 @@ private:
 	sf::Sprite m_sprite;
 
 	sf::Text m_name;
+	sf::Text m_chat;
+	chrono::system_clock::time_point m_mess_end_time;
 public:
+	int id;
 	int m_x, m_y;
 	char name[NAME_SIZE];
 	OBJECT(sf::Texture& t, int x, int y, int x2, int y2) {
 		m_showing = false;
 		m_sprite.setTexture(t);
 		m_sprite.setTextureRect(sf::IntRect(x, y, x2, y2));
+		set_name("NONAME");
+		m_mess_end_time = chrono::system_clock::now();
 	}
 	OBJECT() {
 		m_showing = false;
@@ -72,14 +74,29 @@ public:
 		m_sprite.setPosition(rx, ry);
 		g_window->draw(m_sprite);
 		auto size = m_name.getGlobalBounds();
-		m_name.setPosition(rx + 32 - size.width / 2, ry - 10);
-		g_window->draw(m_name);
+		if (m_mess_end_time < chrono::system_clock::now()) {
+			m_name.setPosition(rx + 32 - size.width / 2, ry - 10);
+			g_window->draw(m_name);
+		}
+		else {
+			m_chat.setPosition(rx + 32 - size.width / 2, ry - 10);
+			g_window->draw(m_chat);
+		}
 	}
 	void set_name(const char str[]) {
 		m_name.setFont(g_font);
 		m_name.setString(str);
-		m_name.setFillColor(sf::Color(255, 255, 0));
+		if (id < MAX_USER) m_name.setFillColor(sf::Color(255, 255, 255));
+		else m_name.setFillColor(sf::Color(255, 255, 0));
 		m_name.setStyle(sf::Text::Bold);
+	}
+
+	void set_chat(const char str[]) {
+		m_chat.setFont(g_font);
+		m_chat.setString(str);
+		m_chat.setFillColor(sf::Color(255, 255, 255));
+		m_chat.setStyle(sf::Text::Bold);
+		m_mess_end_time = chrono::system_clock::now() + chrono::seconds(3);
 	}
 };
 
@@ -122,79 +139,81 @@ void ProcessPacket(char* ptr)
 	{
 	case SC_LOGIN_INFO:
 	{
-		SC_LOGIN_INFO_PACKET * packet = reinterpret_cast<SC_LOGIN_INFO_PACKET*>(ptr);
+		SC_LOGIN_INFO_PACKET* packet = reinterpret_cast<SC_LOGIN_INFO_PACKET*>(ptr);
 		g_myid = packet->id;
-		avatar.m_x = packet->x;
-		avatar.m_y = packet->y;
-		g_left_x = packet->x - 8;
-		g_top_y = packet->y - 8;
+		avatar.id = g_myid;
+		avatar.move(packet->x, packet->y);
+		g_left_x = packet->x - SCREEN_WIDTH / 2;
+		g_top_y = packet->y - SCREEN_HEIGHT / 2;
 		avatar.show();
 	}
 	break;
 
-	case SC_ADD_PLAYER:
+	case SC_ADD_OBJECT:
 	{
-		SC_ADD_PLAYER_PACKET * my_packet = reinterpret_cast<SC_ADD_PLAYER_PACKET*>(ptr);
+		SC_ADD_OBJECT_PACKET* my_packet = reinterpret_cast<SC_ADD_OBJECT_PACKET*>(ptr);
 		int id = my_packet->id;
 
 		if (id == g_myid) {
 			avatar.move(my_packet->x, my_packet->y);
-			g_left_x = my_packet->x - 4;
-			g_top_y = my_packet->y - 4;
+			g_left_x = my_packet->x - SCREEN_WIDTH / 2;
+			g_top_y = my_packet->y - SCREEN_HEIGHT / 2;
 			avatar.show();
 		}
 		else if (id < MAX_USER) {
 			players[id] = OBJECT{ *pieces, 0, 0, 64, 64 };
+			players[id].id = id;
 			players[id].move(my_packet->x, my_packet->y);
 			players[id].set_name(my_packet->name);
 			players[id].show();
 		}
 		else {
-			players[id] = OBJECT{ *pieces, 64, 0, 64, 64 };
+			players[id] = OBJECT{ *pieces, 256, 0, 64, 64 };
+			players[id].id = id;
 			players[id].move(my_packet->x, my_packet->y);
 			players[id].set_name(my_packet->name);
 			players[id].show();
-			//npc[id - NPC_START].x = my_packet->x;
-			//npc[id - NPC_START].y = my_packet->y;
-			//npc[id - NPC_START].attr |= BOB_ATTR_VISIBLE;
 		}
 		break;
 	}
-	case SC_MOVE_PLAYER:
+	case SC_MOVE_OBJECT:
 	{
-		SC_MOVE_PLAYER_PACKET* my_packet = reinterpret_cast<SC_MOVE_PLAYER_PACKET*>(ptr);
+		SC_MOVE_OBJECT_PACKET* my_packet = reinterpret_cast<SC_MOVE_OBJECT_PACKET*>(ptr);
 		int other_id = my_packet->id;
 		if (other_id == g_myid) {
 			avatar.move(my_packet->x, my_packet->y);
-			g_left_x = my_packet->x - 8;
-			g_top_y = my_packet->y - 8;
-		}
-		else if (other_id < MAX_USER) {
-			players[other_id].move(my_packet->x, my_packet->y);
+			g_left_x = my_packet->x - SCREEN_WIDTH / 2;
+			g_top_y = my_packet->y - SCREEN_HEIGHT / 2;
 		}
 		else {
 			players[other_id].move(my_packet->x, my_packet->y);
-
-			//npc[other_id - NPC_START].x = my_packet->x;
-			//npc[other_id - NPC_START].y = my_packet->y;
 		}
 		break;
 	}
 
-	case SC_REMOVE_PLAYER:
+	case SC_REMOVE_OBJECT:
 	{
-		SC_REMOVE_PLAYER_PACKET* my_packet = reinterpret_cast<SC_REMOVE_PLAYER_PACKET*>(ptr);
+		SC_REMOVE_OBJECT_PACKET* my_packet = reinterpret_cast<SC_REMOVE_OBJECT_PACKET*>(ptr);
 		int other_id = my_packet->id;
 		if (other_id == g_myid) {
 			avatar.hide();
 		}
-		else if (other_id < MAX_USER) {
-			players.erase(other_id);
-		}
 		else {
 			players.erase(other_id);
-			//		npc[other_id - NPC_START].attr &= ~BOB_ATTR_VISIBLE;
 		}
+		break;
+	}
+	case SC_CHAT:
+	{
+		SC_CHAT_PACKET* my_packet = reinterpret_cast<SC_CHAT_PACKET*>(ptr);
+		int other_id = my_packet->id;
+		if (other_id == g_myid) {
+			avatar.set_chat(my_packet->mess);
+		}
+		else {
+			players[other_id].set_chat(my_packet->mess);
+		}
+
 		break;
 	}
 	default:
@@ -251,7 +270,7 @@ void client_main()
 			int tile_x = i + g_left_x;
 			int tile_y = j + g_top_y;
 			if ((tile_x < 0) || (tile_y < 0)) continue;
-			if (0 ==(tile_x /3 + tile_y /3) % 2) {
+			if (0 == (tile_x / 3 + tile_y / 3) % 2) {
 				white_tile.a_move(TILE_WIDTH * i, TILE_WIDTH * j);
 				white_tile.a_draw();
 			}
@@ -271,9 +290,9 @@ void client_main()
 	g_window->draw(text);
 }
 
-void send_packet(void *packet)
+void send_packet(void* packet)
 {
-	unsigned char *p = reinterpret_cast<unsigned char *>(packet);
+	unsigned char* p = reinterpret_cast<unsigned char*>(packet);
 	size_t sent = 0;
 	s_socket.send(packet, p[0], sent);
 }
@@ -296,7 +315,7 @@ int main()
 
 	string player_name{ "P" };
 	player_name += to_string(GetCurrentProcessId());
-	
+
 	strcpy_s(p.name, player_name.c_str());
 	send_packet(&p);
 	avatar.set_name(p.name);
