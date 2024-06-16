@@ -1,269 +1,16 @@
-#include <iostream>
-#include <array>
-#include <WS2tcpip.h>
-#include <MSWSock.h>
-#include <thread>
-#include <vector>
-#include <mutex>
-#include <unordered_set>
-#include <concurrent_priority_queue.h>
-#include <queue>
-#include "protocol.h"
+#include "pch.h"
+#include "Over.h"
+#include "Session.h"
+#include "Timer.h"
+#include "Sector.h"
 
-#include "include/lua.hpp"
-
-#pragma comment(lib, "WS2_32.lib")
-#pragma comment(lib, "MSWSock.lib")
-#pragma comment(lib, "lua54.lib")
-using namespace std;
-
-constexpr int VIEW_RANGE = 6;
-enum EVENT_TYPE { EV_RANDOM_MOVE, EV_CHASE, EV_HEAL, EV_ATTACK };
-
-struct TIMER_EVENT {
-	int obj_id;
-	chrono::system_clock::time_point wakeup_time;
-	EVENT_TYPE event_id;
-	int target_id;
-	constexpr bool operator < (const TIMER_EVENT& L) const
-	{
-		return (wakeup_time > L.wakeup_time);
-	}
-};
 concurrency::concurrent_priority_queue<TIMER_EVENT> timer_queue;
 
-enum COMP_TYPE { OP_ACCEPT, OP_RECV, OP_SEND, OP_NPC_MOVE, OP_AI_HELLO };
-class OVER_EXP {
-public:
-	WSAOVERLAPPED _over;
-	WSABUF _wsabuf;
-	char _send_buf[BUF_SIZE];
-	COMP_TYPE _comp_type;
-	int _ai_target_obj;
-	OVER_EXP()
-	{
-		_wsabuf.len = BUF_SIZE;
-		_wsabuf.buf = _send_buf;
-		_comp_type = OP_RECV;
-		ZeroMemory(&_over, sizeof(_over));
-	}
-	OVER_EXP(char* packet)
-	{
-		_wsabuf.len = packet[0];
-		_wsabuf.buf = _send_buf;
-		ZeroMemory(&_over, sizeof(_over));
-		_comp_type = OP_SEND;
-		memcpy(_send_buf, packet, packet[0]);
-	}
-};
-
-enum S_STATE { ST_FREE, ST_ALLOC, ST_INGAME };
-class SESSION {
-	OVER_EXP _recv_over;
-
-public:
-	//npc, ai, timer
-	//bool _is_npc;
-	atomic_bool _is_active;
-	//chrono::system_clock::time_point _npc_move_time;
-
-	mutex _s_lock;
-	S_STATE _state;
-	int _id;
-	SOCKET _socket;
-	short	x, y;
-	char	_name[NAME_SIZE];
-
-	int		_prev_remain;
-	int		_last_move_time;
-
-	//시야처리
-	unordered_set <int> _view_list;
-	mutex	_vl;
-
-	//섹터
-	int now_sx, now_sy;
-
-	//루아스크립트
-	lua_State* _L;
-	mutex	_ll;
-	
-	//
-	int awake_count;
-
-public:
-	SESSION()
-	{
-		_id = -1;
-		_socket = 0;
-		x = y = 0;
-		_name[0] = 0;
-		_state = ST_FREE;
-		_prev_remain = 0;
-
-		//
-		awake_count = -1;
-	}
-
-	~SESSION() {}
-
-	void do_recv()
-	{
-		DWORD recv_flag = 0;
-		memset(&_recv_over._over, 0, sizeof(_recv_over._over));
-		_recv_over._wsabuf.len = BUF_SIZE - _prev_remain;
-		_recv_over._wsabuf.buf = _recv_over._send_buf + _prev_remain;
-		WSARecv(_socket, &_recv_over._wsabuf, 1, 0, &recv_flag,
-			&_recv_over._over, 0);
-	}
-
-	void do_send(void* packet)
-	{
-		OVER_EXP* sdata = new OVER_EXP{ reinterpret_cast<char*>(packet) };
-		WSASend(_socket, &sdata->_wsabuf, 1, 0, 0, &sdata->_over, 0);
-	}
-	void send_login_info_packet()
-	{
-		SC_LOGIN_INFO_PACKET p;
-		p.id = _id;
-		p.size = sizeof(SC_LOGIN_INFO_PACKET);
-		p.type = SC_LOGIN_INFO;
-		p.x = x;
-		p.y = y;
-		do_send(&p);
-	}
-	void send_move_packet(int c_id);
-	void send_add_player_packet(int c_id);
-	void send_chat_packet(int c_id, const char* mess);
-	void send_remove_player_packet(int c_id)
-	{
-		_vl.lock();
-		if (_view_list.count(c_id))
-			_view_list.erase(c_id);
-		else {
-			_vl.unlock();
-			return;
-		}
-		_vl.unlock();
-
-		SC_REMOVE_OBJECT_PACKET p;
-		p.id = c_id;
-		p.size = sizeof(p);
-		p.type = SC_REMOVE_OBJECT;
-		do_send(&p);
-	}
-
-	//void move_npc();
-	//void heart_beat()
-	//{
-	//	move_npc();
-	//}
-};
-
 HANDLE h_iocp;
-array<SESSION, MAX_USER + MAX_NPC> clients;
 
-array<array< list<int>, 125>, 125> g_ObjectSector; // 16칸씩 sector를 잡음 
-mutex _sector;
-void insert_sector(int c_id)
-{
-	int sector_y = clients[c_id].now_sy = clients[c_id].y / 16;
-	int sector_x = clients[c_id].now_sx = clients[c_id].x / 16;
-
-	_sector.lock();
-	g_ObjectSector[sector_y][sector_x].emplace_back(c_id);
-	_sector.unlock();
-}
-void delete_sector(int c_id)
-{
-	_sector.lock();
-	g_ObjectSector[clients[c_id].now_sy][clients[c_id].now_sx].remove(c_id);
-	_sector.unlock();
-}
-void update_sector(int c_id)
-{
-	if (clients[c_id].now_sy != clients[c_id].y / 16 || clients[c_id].now_sx != clients[c_id].x / 16)
-	{
-		delete_sector(c_id);
-		insert_sector(c_id);
-	}
-}
-
+//AcceptEx
 SOCKET g_s_socket, g_c_socket;
 OVER_EXP g_a_over;
-
-bool is_pc(int object_id)
-{
-	return object_id < MAX_USER;
-}
-
-bool is_npc(int object_id)
-{
-	return !is_pc(object_id);
-}
-
-bool can_see(int a, int b)
-{
-
-	// int dist = sqrtf((clients[a].x - clients[b].x) * (clients[a].x - clients[b].x)
-	//	+ (clients[a].y - clients[b].y) * (clients[a].y - clients[b].y));
-	int dist_s = (clients[a].x - clients[b].x) * (clients[a].x - clients[b].x)
-		+ (clients[a].y - clients[b].y) * (clients[a].y - clients[b].y);
-
-	return VIEW_RANGE * VIEW_RANGE >= dist_s;
-
-	//if (abs(clients[a].x - clients[b].x) > VIEW_RANGE) return false;
-	//return abs(clients[a].y - clients[b].y) <= VIEW_RANGE;
-}
-
-void SESSION::send_move_packet(int c_id)
-{
-	SC_MOVE_OBJECT_PACKET p;
-	p.id = c_id;
-	p.size = sizeof(SC_MOVE_OBJECT_PACKET);
-	p.type = SC_MOVE_OBJECT;
-	p.x = clients[c_id].x;
-	p.y = clients[c_id].y;
-	p.move_time = clients[c_id]._last_move_time;
-	do_send(&p);
-}
-
-void SESSION::send_add_player_packet(int c_id)
-{
-	SC_ADD_OBJECT_PACKET add_packet;
-	add_packet.id = c_id;
-	strcpy_s(add_packet.name, clients[c_id]._name);
-	add_packet.size = sizeof(add_packet);
-	add_packet.type = SC_ADD_OBJECT;
-	add_packet.x = clients[c_id].x;
-	add_packet.y = clients[c_id].y;
-	_vl.lock();
-	_view_list.insert(c_id);
-	_vl.unlock();
-
-	do_send(&add_packet);
-}
-
-void SESSION::send_chat_packet(int p_id, const char* mess)
-{
-	SC_CHAT_PACKET packet;
-	packet.id = p_id;
-	packet.size = sizeof(packet);
-	packet.type = SC_CHAT;
-	strcpy_s(packet.mess, mess);
-	do_send(&packet);
-}
-
-int get_new_client_id()
-{
-	for (int i = 0; i < MAX_USER; ++i)
-	{
-		lock_guard <mutex> ll{ clients[i]._s_lock };
-		if (clients[i]._state == ST_FREE)
-			return i;
-	}
-	return -1;
-}
 
 void WakeUpNPC(int npc_id, int waker)
 {
@@ -297,12 +44,13 @@ void process_packet(int c_id, char* packet)
 		clients[c_id].send_login_info_packet();
 
 		//생성 sector insert
-		insert_sector(c_id);
+		clients[c_id].sec_id = InitSector(c_id, clients[c_id].x, clients[c_id].y);
 		//
 
-		_sector.lock();
-		list<int> sector = g_ObjectSector[clients[c_id].now_sy][clients[c_id].now_sx];
-		_sector.unlock();
+		g_Sector[clients[c_id].sec_id]->_sector.lock();
+		unordered_set<int> sector = g_Sector[clients[c_id].sec_id]->_obj_id;
+		g_Sector[clients[c_id].sec_id]->_sector.unlock();
+
 		for (auto& sc : sector)
 		{
 			{
@@ -335,12 +83,12 @@ void process_packet(int c_id, char* packet)
 		clients[c_id].y = y;
 
 		//이동 sector update
-		update_sector(c_id);
+		clients[c_id].sec_id = Update_sector(c_id, clients[c_id].x, clients[c_id].y, clients[c_id].sec_id);
 		//
 
-		_sector.lock();
-		list<int> sector = g_ObjectSector[clients[c_id].now_sy][clients[c_id].now_sx];
-		_sector.unlock();
+		g_Sector[clients[c_id].sec_id]->_sector.lock();
+		unordered_set<int> sector = g_Sector[clients[c_id].sec_id]->_obj_id;
+		g_Sector[clients[c_id].sec_id]->_sector.unlock();
 
 		unordered_set<int> near_list;
 		clients[c_id]._vl.lock();
@@ -423,7 +171,7 @@ void disconnect(int c_id)
 	}
 
 	//삭제 sector delete
-	delete_sector(c_id);
+	Delete_sector(clients[c_id].sec_id, c_id);
 	//
 
 	closesocket(clients[c_id]._socket);
@@ -450,9 +198,9 @@ void do_npc_random_move(int npc_id)
 {
 	SESSION& npc = clients[npc_id];
 
-	_sector.lock();
-	list<int> sector = g_ObjectSector[npc.now_sy][npc.now_sx];
-	_sector.unlock();
+	g_Sector[clients[npc_id].sec_id]->_sector.lock();
+	unordered_set<int> sector = g_Sector[clients[npc_id].sec_id]->_obj_id;
+	g_Sector[clients[npc_id].sec_id]->_sector.unlock();
 
 	unordered_set<int> old_vl;
 	for (auto& sc : sector)
@@ -477,11 +225,11 @@ void do_npc_random_move(int npc_id)
 	npc.y = y;
 
 	//이동 sector update
-	update_sector(npc_id);
+	npc.sec_id = Update_sector(npc._id, npc.x, npc.y, npc.sec_id);
 	//
-	_sector.lock();
-	sector = g_ObjectSector[npc.now_sy][npc.now_sx];
-	_sector.unlock();
+	g_Sector[clients[npc_id].sec_id]->_sector.lock();
+	sector = g_Sector[clients[npc_id].sec_id]->_obj_id;
+	g_Sector[clients[npc_id].sec_id]->_sector.unlock();
 
 	unordered_set<int> new_vl;
 	for (auto& sc : sector)
@@ -647,38 +395,6 @@ void worker_thread(HANDLE h_iocp)
 	}
 }
 
-int API_get_x(lua_State* L)
-{
-	int user_id =
-		(int)lua_tointeger(L, -1);
-	lua_pop(L, 2);
-	int x = clients[user_id].x;
-	lua_pushnumber(L, x);
-	return 1;
-}
-
-int API_get_y(lua_State* L)
-{
-	int user_id =
-		(int)lua_tointeger(L, -1);
-	lua_pop(L, 2);
-	int y = clients[user_id].y;
-	lua_pushnumber(L, y);
-	return 1;
-}
-
-int API_SendMessage(lua_State* L)
-{
-	int my_id = (int)lua_tointeger(L, -3);
-	int user_id = (int)lua_tointeger(L, -2);
-	char* mess = (char*)lua_tostring(L, -1);
-
-	lua_pop(L, 4);
-
-	clients[user_id].send_chat_packet(my_id, mess);
-	return 0;
-}
-
 void InitializeNPC()
 {
 	cout << "NPC intialize begin.\n";
@@ -690,11 +406,14 @@ void InitializeNPC()
 		sprintf_s(clients[i]._name, "NPC%d", i);
 		clients[i]._state = ST_INGAME;
 
-		insert_sector(i);
+		//생성 sector insert
+		clients[i].sec_id = InitSector(i, clients[i].x, clients[i].y);
+		//
 
-		_sector.lock();
-		list<int> sector = g_ObjectSector[clients[i].now_sy][clients[i].now_sx];
-		_sector.unlock();
+		g_Sector[clients[i].sec_id]->_sector.lock();
+		unordered_set<int> sector = g_Sector[clients[i].sec_id]->_obj_id;
+		g_Sector[clients[i].sec_id]->_sector.unlock();
+
 		for (auto& sc : sector)
 		{
 			{
@@ -772,6 +491,8 @@ int main()
 	listen(g_s_socket, SOMAXCONN);
 	SOCKADDR_IN cl_addr;
 	int addr_size = sizeof(cl_addr);
+
+	InitializeSector();
 
 	InitializeNPC();
 
