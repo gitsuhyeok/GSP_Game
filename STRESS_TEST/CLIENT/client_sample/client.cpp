@@ -135,7 +135,7 @@ void client_finish()
 void ProcessPacket(char* ptr)
 {
 	static bool first_time = true;
-	switch (ptr[1])
+	switch (ptr[2])
 	{
 	case SC_LOGIN_INFO:
 	{
@@ -211,6 +211,7 @@ void ProcessPacket(char* ptr)
 			avatar.set_chat(my_packet->mess);
 		}
 		else {
+			//cout << "error" << endl;
 			players[other_id].set_chat(my_packet->mess);
 		}
 
@@ -229,7 +230,11 @@ void process_data(char* net_buf, size_t io_byte)
 	static char packet_buffer[BUF_SIZE];
 
 	while (0 != io_byte) {
-		if (0 == in_packet_size) in_packet_size = ptr[0];
+		if (0 == in_packet_size)
+		{
+			in_packet_size = *reinterpret_cast<unsigned short*>(ptr);
+			//ptr += sizeof(unsigned short);
+		}
 		if (io_byte + saved_packet_size >= in_packet_size) {
 			memcpy(packet_buffer + saved_packet_size, ptr, in_packet_size - saved_packet_size);
 			ProcessPacket(packet_buffer);

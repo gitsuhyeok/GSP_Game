@@ -283,7 +283,7 @@ void WakeUpNPC(int npc_id, int waker)
 
 void process_packet(int c_id, char* packet)
 {
-	switch (packet[1]) {
+	switch (packet[2]) {
 	case CS_LOGIN: {
 		CS_LOGIN_PACKET* p = reinterpret_cast<CS_LOGIN_PACKET*>(packet);
 		strcpy_s(clients[c_id]._name, p->name);
@@ -579,7 +579,7 @@ void worker_thread(HANDLE h_iocp)
 			int remain_data = num_bytes + clients[key]._prev_remain;
 			char* p = ex_over->_send_buf;
 			while (remain_data > 0) {
-				int packet_size = p[0];
+				int packet_size = *reinterpret_cast<unsigned short*>(p);
 				if (packet_size <= remain_data) {
 					process_packet(static_cast<int>(key), p);
 					p = p + packet_size;
