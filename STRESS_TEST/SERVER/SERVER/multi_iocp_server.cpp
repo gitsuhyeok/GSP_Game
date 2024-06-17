@@ -616,7 +616,7 @@ void worker_thread(HANDLE h_iocp)
 					lua_getglobal(L, "event_npc_bye");
 					lua_pushnumber(L, ex_over->_ai_target_obj);
 					lua_pcall(L, 1, 0, 0);
-					//lua_pop(L, 1);
+					lua_pop(L, 1);
 					clients[key]._ll.unlock();
 				}
 				TIMER_EVENT ev{ key, chrono::system_clock::now() + 1s, EV_RANDOM_MOVE, ex_over->_ai_target_obj};
@@ -635,8 +635,8 @@ void worker_thread(HANDLE h_iocp)
 			lua_pushnumber(L, ex_over->_ai_target_obj);
 			lua_pcall(L, 1, 1, 0);
 			int a = lua_tonumber(L,1);
-			 clients[key].awake_count = a;
-			//lua_pop(L, 1);
+			clients[key].awake_count = a;
+			lua_pop(L, 1);
 			clients[key]._ll.unlock();
 
 			delete ex_over;
@@ -675,7 +675,8 @@ int API_SendMessage(lua_State* L)
 
 	lua_pop(L, 4);
 
-	clients[user_id].send_chat_packet(my_id, mess);
+	
+	//clients[user_id].send_chat_packet(my_id, mess);
 	return 0;
 }
 

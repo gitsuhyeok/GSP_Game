@@ -135,6 +135,7 @@ void client_finish()
 void ProcessPacket(char* ptr)
 {
 	static bool first_time = true;
+	cout << "now packet type <<" << (int)ptr[2] << endl;;
 	switch (ptr[2])
 	{
 	case SC_LOGIN_INFO:
@@ -218,7 +219,7 @@ void ProcessPacket(char* ptr)
 		break;
 	}
 	default:
-		printf("Unknown PACKET type [%d]\n", ptr[1]);
+		printf("Unknown PACKET type [%d]\n", ptr[2]);
 	}
 }
 
