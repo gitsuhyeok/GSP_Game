@@ -133,6 +133,11 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="Over.cpp" />
+    <ClCompile Include="pch.cpp" />
+    <ClCompile Include="Sector.cpp" />
+    <ClCompile Include="Session.cpp" />
+    <ClCompile Include="Timer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\lauxlib.h" />
@@ -140,7 +145,12 @@
     <ClInclude Include="include\lua.hpp" />
     <ClInclude Include="include\luaconf.h" />
     <ClInclude Include="include\lualib.h" />
+    <ClInclude Include="Over.h" />
+    <ClInclude Include="pch.h" />
     <ClInclude Include="protocol.h" />
+    <ClInclude Include="Sector.h" />
+    <ClInclude Include="Session.h" />
+    <ClInclude Include="Timer.h" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="lua54.lib" />

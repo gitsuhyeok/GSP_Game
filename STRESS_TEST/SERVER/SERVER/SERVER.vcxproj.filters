@@ -1,42 +1,65 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="소스 파일">
-      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
-      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
-    </Filter>
-    <Filter Include="헤더 파일">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
-    </Filter>
     <Filter Include="리소스 파일">
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Main">
+      <UniqueIdentifier>{ec1de5b0-d4c6-49af-9cbd-29dafe796a34}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="pch">
+      <UniqueIdentifier>{11992b86-c052-49c6-adbb-487ce919b253}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="protocol">
+      <UniqueIdentifier>{5d147dc5-73a9-4032-9e87-353173001fde}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Timer">
+      <UniqueIdentifier>{3be5d4aa-0ff8-43e4-937a-177c79035253}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Session">
+      <UniqueIdentifier>{846afbe6-eb2b-408d-9a3c-5f3fbb966123}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="OVER_EXP">
+      <UniqueIdentifier>{6e93382c-32a1-4388-975e-4f9814eff3fb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Sector">
+      <UniqueIdentifier>{ce5680e5-a92e-48e6-b858-0df6cafc4230}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="multi_iocp_server.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="protocol.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
     <ClInclude Include="include\lauxlib.h">
-      <Filter>헤더 파일</Filter>
+      <Filter>리소스 파일</Filter>
     </ClInclude>
     <ClInclude Include="include\lua.h">
-      <Filter>헤더 파일</Filter>
+      <Filter>리소스 파일</Filter>
     </ClInclude>
     <ClInclude Include="include\lua.hpp">
-      <Filter>헤더 파일</Filter>
+      <Filter>리소스 파일</Filter>
     </ClInclude>
     <ClInclude Include="include\luaconf.h">
-      <Filter>헤더 파일</Filter>
+      <Filter>리소스 파일</Filter>
     </ClInclude>
     <ClInclude Include="include\lualib.h">
-      <Filter>헤더 파일</Filter>
+      <Filter>리소스 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="pch.h">
+      <Filter>pch</Filter>
+    </ClInclude>
+    <ClInclude Include="protocol.h">
+      <Filter>protocol</Filter>
+    </ClInclude>
+    <ClInclude Include="Session.h">
+      <Filter>Session</Filter>
+    </ClInclude>
+    <ClInclude Include="Over.h">
+      <Filter>OVER_EXP</Filter>
+    </ClInclude>
+    <ClInclude Include="Timer.h">
+      <Filter>Timer</Filter>
+    </ClInclude>
+    <ClInclude Include="Sector.h">
+      <Filter>Sector</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -45,8 +68,28 @@
     </Library>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="multi_iocp_server.cpp">
+      <Filter>Main</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>pch</Filter>
+    </ClCompile>
+    <ClCompile Include="Session.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
+    <ClCompile Include="Over.cpp">
+      <Filter>OVER_EXP</Filter>
+    </ClCompile>
+    <ClCompile Include="Timer.cpp">
+      <Filter>Timer</Filter>
+    </ClCompile>
+    <ClCompile Include="Sector.cpp">
+      <Filter>Sector</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
     <None Include="npc.lua">
-      <Filter>리소스 파일</Filter>
+      <Filter>Main</Filter>
     </None>
   </ItemGroup>
 </Project>
