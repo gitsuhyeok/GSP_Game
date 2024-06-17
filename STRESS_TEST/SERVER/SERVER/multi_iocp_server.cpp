@@ -395,38 +395,6 @@ void worker_thread(HANDLE h_iocp)
 	}
 }
 
-int API_get_x(lua_State* L)
-{
-	int user_id =
-		(int)lua_tointeger(L, -1);
-	lua_pop(L, 2);
-	int x = clients[user_id].x;
-	lua_pushnumber(L, x);
-	return 1;
-}
-
-int API_get_y(lua_State* L)
-{
-	int user_id =
-		(int)lua_tointeger(L, -1);
-	lua_pop(L, 2);
-	int y = clients[user_id].y;
-	lua_pushnumber(L, y);
-	return 1;
-}
-
-int API_SendMessage(lua_State* L)
-{
-	int my_id = (int)lua_tointeger(L, -3);
-	int user_id = (int)lua_tointeger(L, -2);
-	char* mess = (char*)lua_tostring(L, -1);
-
-	lua_pop(L, 4);
-
-	
-	//clients[user_id].send_chat_packet(my_id, mess);
-	return 0;
-}
 
 void InitializeNPC()
 {

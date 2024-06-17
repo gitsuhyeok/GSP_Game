@@ -26,11 +26,30 @@
     <Image Include="chessmap.bmp">
       <Filter>리소스 파일</Filter>
     </Image>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\..\SERVER\SERVER\protocol.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
+    <Image Include="BlueLink.png">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="GreenLink.png">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="Map.png">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="PinkLink.png">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="RedLink.png">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="Boss.png">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="NPC.png">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="SandMonster.png">
+      <Filter>리소스 파일</Filter>
+    </Image>
   </ItemGroup>
   <ItemGroup>
     <Font Include="cour.ttf">

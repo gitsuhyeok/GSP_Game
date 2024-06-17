@@ -24,10 +24,40 @@ int g_myid;
 sf::RenderWindow* g_window;
 sf::Font g_font;
 
+sf::Texture* board;
+sf::Texture* pieces;
+
+sf::Texture* redlink;
+sf::Texture* greenlink;
+sf::Texture* bluelink;
+sf::Texture* pinklink;
+
+sf::Texture* npc;
+
+sf::Texture* sandmonster;
+sf::Texture* skulmonster;
+sf::Texture* bossmonster;
+
+sf::Texture* maptile;
+
+//enum OBJECTTYPE {
+//	REDLINK, GREENLINK, BLUELINK, PINKLINK, //0 1 2 3
+//	NPC_SKY, NPC_RED, NPC_BLUE, NPC_GREEN, NPC_PINK, NPC_YELLOW, //4 5 6 7 8 9
+//	SANDMONSTER, SKULMONSTER, BOSSMONSTER,
+//	GRASS1, GRASS2, GRASS3,
+//	GREEN1, GREEN2,
+//	FLOWER1, FLOWER2,
+//	GRASSBLOCK, SANDBLOCK, WOODBLOCK,
+//	SAND1, SAND2, SAND3, SAND4
+//};
+enum MOVEDIRECTION {UP, DOWN, LEFT, RIGHT};
+
 class OBJECT {
 private:
 	bool m_showing;
 	sf::Sprite m_sprite;
+
+	//OBJECTTYPE obj_type;
 
 	sf::Text m_name;
 	sf::Text m_chat;
@@ -36,10 +66,15 @@ public:
 	int id;
 	int m_x, m_y;
 	char name[NAME_SIZE];
+	int direction; //0:up, 1:down, 2:left, 3:right
+
 	OBJECT(sf::Texture& t, int x, int y, int x2, int y2) {
 		m_showing = false;
+
 		m_sprite.setTexture(t);
 		m_sprite.setTextureRect(sf::IntRect(x, y, x2, y2));
+		m_sprite.setScale(64.f / x2, 64.f / y2);
+
 		set_name("NONAME");
 		m_mess_end_time = chrono::system_clock::now();
 	}
@@ -100,28 +135,106 @@ public:
 	}
 };
 
-OBJECT avatar;
-unordered_map <int, OBJECT> players;
+OBJECT avatar;							//주인공
+unordered_map <int, OBJECT> players;	//다른 플레이어, NPC
 
 OBJECT white_tile;
 OBJECT black_tile;
 
-sf::Texture* board;
-sf::Texture* pieces;
+//기본 상하좌우 보유  4개슬롯 + 맵타일은 15개슬롯
+//2가지 yellow blue
+//5가지 //2가지 grass, sand //4가지 
+
+OBJECT GRASS1; OBJECT GRASS2; OBJECT GRASS3;
+OBJECT GREEN1; OBJECT GREEN2;
+OBJECT FLOWER1; OBJECT FLOWER2;
+OBJECT GRASSBLOCK; OBJECT SANDBLOCK; OBJECT WOODBLOCK;
+OBJECT SAND1; OBJECT SAND2; OBJECT SAND3; OBJECT SAND4;
+
+void change_ahlpa(sf::Texture *image,int r, int g, int b)
+{
+	sf::Image img = image->copyToImage();
+	sf::Color backgroundColor(r, g, b);
+	for (unsigned int i = 0; i < img.getSize().x; ++i)
+	{
+		for (unsigned int j = 0; j < img.getSize().y; ++j) {
+			if (img.getPixel(i, j) == backgroundColor) {
+				img.setPixel(i, j, sf::Color(r, g, b, 0)); // Set to transparent
+			}
+		}
+	}
+	image->loadFromImage(img);
+}
 
 void client_initialize()
 {
 	board = new sf::Texture;
 	pieces = new sf::Texture;
+
+	redlink = new sf::Texture;
+	greenlink = new sf::Texture;
+	bluelink = new sf::Texture;
+	pinklink = new sf::Texture;
+
+	npc = new sf::Texture;
+
+	sandmonster = new sf::Texture;
+	skulmonster = new sf::Texture;
+	bossmonster = new sf::Texture;
+
+	maptile = new sf::Texture;
+
 	board->loadFromFile("chessmap.bmp");
 	pieces->loadFromFile("chess2.png");
+
+	redlink->loadFromFile("RedLink.png");
+	greenlink->loadFromFile("GreenLink.png");
+	bluelink->loadFromFile("BlueLink.png");
+	pinklink->loadFromFile("PinkLink.png");
+	
+	npc->loadFromFile("NPC.png");
+	
+	sandmonster->loadFromFile("SandMonster.png");
+	skulmonster->loadFromFile("SkulMonster.png");
+	bossmonster->loadFromFile("Boss.png");
+	
+	maptile->loadFromFile("Map.png");
+
+	//텍스처 배경 투명화
+	change_ahlpa(redlink, 255, 183, 185);
+	change_ahlpa(greenlink, 116, 228, 150);
+	change_ahlpa(bluelink, 188, 231, 241);
+	change_ahlpa(pinklink, 235, 197, 252);
+
+	change_ahlpa(npc, 234, 187, 45);
+
+	change_ahlpa(sandmonster, 76, 94, 255);
+	change_ahlpa(skulmonster, 255, 233, 127);
+
 	if (false == g_font.loadFromFile("cour.ttf")) {
 		cout << "Font Loading Error!\n";
 		exit(-1);
 	}
 	white_tile = OBJECT{ *board, 5, 5, TILE_WIDTH, TILE_WIDTH };
 	black_tile = OBJECT{ *board, 69, 5, TILE_WIDTH, TILE_WIDTH };
-	avatar = OBJECT{ *pieces, 128, 0, 64, 64 };
+
+	avatar = OBJECT{ *redlink, 37, 116, 18, 35 }; //캐릭터 선택을 만들거?
+
+	GRASS1 = OBJECT{ *maptile, 84, 44, 16, 16 };
+	GRASS2 = OBJECT{ *maptile, 104, 44, 16, 16 };
+	GRASS3 = OBJECT{ *maptile, 124, 44, 16, 16 };
+	GREEN1 = OBJECT{ *maptile, 24, 24, 16, 16 };
+	GREEN2 = OBJECT{ *maptile, 44, 24, 16, 16 };
+	FLOWER1 = OBJECT{ *maptile, 144, 44, 16, 16 };
+	FLOWER2 = OBJECT{ *maptile, 164, 44, 16, 16 };
+	GRASSBLOCK = OBJECT{ *maptile, 224, 24, 16, 16 };
+	SANDBLOCK = OBJECT{ *maptile, 424, 24, 16, 16 };
+	WOODBLOCK = OBJECT{ *maptile, 344, 24, 16, 16 };
+	SAND1 = OBJECT{ *maptile, 164, 64, 16, 16 };
+	SAND2 = OBJECT{ *maptile, 184, 64, 16, 16 };
+	SAND3 = OBJECT{ *maptile, 164, 84, 16, 16 };
+	SAND4 = OBJECT{ *maptile, 184, 84, 16, 16 };
+
 	avatar.move(4, 4);
 }
 
@@ -162,14 +275,14 @@ void ProcessPacket(char* ptr)
 			avatar.show();
 		}
 		else if (id < MAX_USER) {
-			players[id] = OBJECT{ *pieces, 0, 0, 64, 64 };
+			players[id] = OBJECT{ *redlink, 37, 116, 18, 35 };
 			players[id].id = id;
 			players[id].move(my_packet->x, my_packet->y);
 			players[id].set_name(my_packet->name);
 			players[id].show();
 		}
 		else {
-			players[id] = OBJECT{ *pieces, 256, 0, 64, 64 };
+			players[id] = OBJECT{ *sandmonster, 9, 88, 40, 32 };
 			players[id].id = id;
 			players[id].move(my_packet->x, my_packet->y);
 			players[id].set_name(my_packet->name);
@@ -277,13 +390,13 @@ void client_main()
 			int tile_y = j + g_top_y;
 			if ((tile_x < 0) || (tile_y < 0)) continue;
 			if (0 == (tile_x / 3 + tile_y / 3) % 2) {
-				white_tile.a_move(TILE_WIDTH * i, TILE_WIDTH * j);
-				white_tile.a_draw();
+				GRASS1.a_move(TILE_WIDTH * i, TILE_WIDTH * j);
+				GRASS1.a_draw();
 			}
 			else
 			{
-				black_tile.a_move(TILE_WIDTH * i, TILE_WIDTH * j);
-				black_tile.a_draw();
+				SAND1.a_move(TILE_WIDTH * i, TILE_WIDTH * j);
+				SAND1.a_draw();
 			}
 		}
 	avatar.draw();

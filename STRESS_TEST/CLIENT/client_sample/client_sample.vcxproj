@@ -135,8 +135,16 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <Image Include="BlueLink.png" />
+    <Image Include="Boss.png" />
     <Image Include="chess2.png" />
     <Image Include="chessmap.bmp" />
+    <Image Include="GreenLink.png" />
+    <Image Include="Map.png" />
+    <Image Include="NPC.png" />
+    <Image Include="PinkLink.png" />
+    <Image Include="RedLink.png" />
+    <Image Include="SandMonster.png" />
   </ItemGroup>
   <ItemGroup>
     <Font Include="cour.ttf" />

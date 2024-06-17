@@ -164,6 +164,6 @@ int API_SendMessage(lua_State* L)
 
 	lua_pop(L, 4);
 
-	clients[user_id].send_chat_packet(my_id, mess);
+	//clients[user_id].send_chat_packet(my_id, mess);
 	return 0;
 }

@@ -2,7 +2,7 @@
 class Sector
 {
 public:
-	//하나의 섹터 크기는 80으로 총 625개의 섹터
+	//하나의 섹터 크기는 100으로 총 400개의 섹터
 	int _sector_id;
 
 	mutex _sector;
@@ -19,7 +19,7 @@ public:
 
 };
 
-extern array<Sector*, 625> g_Sector;
+extern array<Sector*, 400> g_Sector;
 
 void InitializeSector();
 int InitSector(int c_id, int x, int y);

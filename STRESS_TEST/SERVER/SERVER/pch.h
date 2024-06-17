@@ -20,4 +20,4 @@
 
 using namespace std;
 
-constexpr int VIEW_RANGE = 6;
+constexpr int VIEW_RANGE = 15;

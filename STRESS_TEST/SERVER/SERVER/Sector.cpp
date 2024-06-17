@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "Sector.h"
 
-array<Sector*, 625> g_Sector;
+array<Sector*, 400> g_Sector;
 
 void Sector::AddObject(int c_id)
 {
@@ -21,7 +21,7 @@ void Sector::DelObject(int c_id)
 void InitializeSector()
 {
 	cout << "Sector initialize begin.\n";
-	for (int i = 0; i <= 625; i++)
+	for (int i = 0; i <= 400; i++)
 	{
 		Sector* temp = new Sector(i);
 		g_Sector[i] = temp;
@@ -31,9 +31,9 @@ void InitializeSector()
 
 int InitSector(int c_id, int x, int y)
 {
-	int height = y / 80;
-	int width = x / 80;
-	int sec_id = height * 25 + width;
+	int height = y / 100;
+	int width = x / 100;
+	int sec_id = height * 20 + width;
 	Insert_sector(sec_id, c_id);
 	return sec_id;
 }
@@ -47,9 +47,9 @@ void Delete_sector(int sec_id, int c_id)
 }
 int Update_sector(int c_id, int x, int y, int c_sec_id)
 {
-	int height = y / 80;
-	int width = x / 80;
-	int sec_id = height * 25 + width;
+	int height = y / 100;
+	int width = x / 100;
+	int sec_id = height * 20 + width;
 
 	if (sec_id != c_sec_id)
 	{
