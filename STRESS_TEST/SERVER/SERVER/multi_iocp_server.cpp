@@ -5,6 +5,8 @@
 #include "Sector.h"
 
 concurrency::concurrent_priority_queue<TIMER_EVENT> timer_queue;
+vector<vector<int>> level_vec(W_WIDTH, vector<int>(W_HEIGHT));
+mutex _level;
 
 HANDLE h_iocp;
 
@@ -28,17 +30,39 @@ void WakeUpNPC(int npc_id, int waker)
 }
 
 
+bool BlockCheck(int x, int y)
+{
+	_level.lock();
+	if (level_vec[x][y] == 7 || level_vec[x][y] == 8 || level_vec[x][y] == 9)
+	{
+		_level.unlock();
+		return true;
+	}
+	_level.unlock();
+	return false;
+}
+
 void process_packet(int c_id, char* packet)
 {
 	switch (packet[2]) {
 	case CS_LOGIN: {
 		CS_LOGIN_PACKET* p = reinterpret_cast<CS_LOGIN_PACKET*>(packet);
-		strcpy_s(clients[c_id]._name, p->name);
+
+		char dataname[20];
+		strcpy_s(dataname, p->name);
+		string data(dataname);
+		size_t pos = data.find(":");
+		string player_name = data.substr(0, pos);
+		unsigned int color = std::stoul(data.substr(pos + 1));
+
+		strcpy_s(clients[c_id]._name, player_name.c_str());
+
 		{
 			lock_guard<mutex> ll{ clients[c_id]._s_lock };
 			clients[c_id]._state = ST_INGAME;
-			clients[c_id].x = rand() % W_WIDTH;
-			clients[c_id].y = rand() % W_HEIGHT;
+			clients[c_id].x = 850;
+			clients[c_id].y = 851;
+			clients[c_id].visual = color;
 		}
 
 		clients[c_id].send_login_info_packet();
@@ -66,6 +90,10 @@ void process_packet(int c_id, char* packet)
 				WakeUpNPC(clients[sc]._id, c_id);
 			clients[c_id].send_add_player_packet(sc);
 		}
+
+		TIMER_EVENT ev{ c_id, chrono::system_clock::now(), EV_AUTOHEAL, c_id };
+		timer_queue.push(ev);
+
 		break;
 	}
 	case CS_MOVE: {
@@ -79,15 +107,29 @@ void process_packet(int c_id, char* packet)
 		case 2: if (x > 0) x--; break;
 		case 3: if (x < W_WIDTH - 1) x++; break;
 		}
+
+		g_Sector[clients[c_id].sec_id]->_sector.lock();
+		unordered_set<int> sector = g_Sector[clients[c_id].sec_id]->_obj_id;
+		g_Sector[clients[c_id].sec_id]->_sector.unlock();
+
+		for (auto& sc : sector)
+		{
+			if (clients[sc].x == x && clients[sc].y == y)
+				return;
+		}
+
+		if (BlockCheck(x, y)) return;
+
 		clients[c_id].x = x;
 		clients[c_id].y = y;
+		clients[c_id].send_move_packet(c_id);
 
 		//이동 sector update
 		clients[c_id].sec_id = Update_sector(c_id, clients[c_id].x, clients[c_id].y, clients[c_id].sec_id);
 		//
 
 		g_Sector[clients[c_id].sec_id]->_sector.lock();
-		unordered_set<int> sector = g_Sector[clients[c_id].sec_id]->_obj_id;
+		sector = g_Sector[clients[c_id].sec_id]->_obj_id;
 		g_Sector[clients[c_id].sec_id]->_sector.unlock();
 
 		unordered_set<int> near_list;
@@ -110,7 +152,6 @@ void process_packet(int c_id, char* packet)
 			}
 		}
 
-		clients[c_id].send_move_packet(c_id);
 
 		// ADD_PLAYER
 		for (auto& cl : near_list) {
@@ -144,6 +185,168 @@ void process_packet(int c_id, char* packet)
 				if (is_pc(cl))
 					clients[cl].send_remove_player_packet(c_id);
 			}
+		}
+	}
+		break;
+
+	case CS_ATTACK: {
+		CS_ATTACK_PACKET* p = reinterpret_cast<CS_ATTACK_PACKET*>(packet);
+		clients[c_id]._last_attack_time = p->attack_time;
+
+		g_Sector[clients[c_id].sec_id]->_sector.lock();
+		unordered_set<int> sector = g_Sector[clients[c_id].sec_id]->_obj_id;
+		g_Sector[clients[c_id].sec_id]->_sector.unlock();
+
+		if (p->key == 1)
+		{
+			vector<vector<int>> attackedtile;
+
+			int c_x = clients[c_id].x;
+			int c_y = clients[c_id].y;
+			switch (clients[c_id].visual) {
+			case 1: //r sword
+				switch (p->direction) {
+				case 1:
+					attackedtile.emplace_back(vector<int>{c_x - 2, c_y + 1});
+					attackedtile.emplace_back(vector<int>{c_x - 1, c_y + 1});
+					attackedtile.emplace_back(vector<int>{c_x, c_y + 1});
+					attackedtile.emplace_back(vector<int>{c_x + 1, c_y + 1});
+					attackedtile.emplace_back(vector<int>{c_x + 2, c_y + 1});
+					attackedtile.emplace_back(vector<int>{c_x - 1, c_y + 2});
+					attackedtile.emplace_back(vector<int>{c_x, c_y + 2});
+					attackedtile.emplace_back(vector<int>{c_x + 1, c_y + 2});
+					attackedtile.emplace_back(vector<int>{c_x, c_y + 3});
+					break;
+				case 2:
+					attackedtile.emplace_back(vector<int>{c_x - 1, c_y - 2});
+					attackedtile.emplace_back(vector<int>{c_x - 1, c_y - 1});
+					attackedtile.emplace_back(vector<int>{c_x - 1, c_y});
+					attackedtile.emplace_back(vector<int>{c_x - 1, c_y + 1});
+					attackedtile.emplace_back(vector<int>{c_x - 1, c_y + 2});
+					attackedtile.emplace_back(vector<int>{c_x - 2, c_y - 1});
+					attackedtile.emplace_back(vector<int>{c_x - 2, c_y});
+					attackedtile.emplace_back(vector<int>{c_x - 2, c_y + 1});
+					attackedtile.emplace_back(vector<int>{c_x - 3, c_y});
+					break;
+				case 3:
+					attackedtile.emplace_back(vector<int>{c_x + 1, c_y - 2});
+					attackedtile.emplace_back(vector<int>{c_x + 1, c_y - 1});
+					attackedtile.emplace_back(vector<int>{c_x + 1, c_y});
+					attackedtile.emplace_back(vector<int>{c_x + 1, c_y + 1});
+					attackedtile.emplace_back(vector<int>{c_x + 1, c_y + 2});
+					attackedtile.emplace_back(vector<int>{c_x + 2, c_y - 1});
+					attackedtile.emplace_back(vector<int>{c_x + 2, c_y});
+					attackedtile.emplace_back(vector<int>{c_x + 2, c_y + 1});
+					attackedtile.emplace_back(vector<int>{c_x + 3, c_y});
+					break;
+				case 4:
+					attackedtile.emplace_back(vector<int>{c_x - 2, c_y - 1});
+					attackedtile.emplace_back(vector<int>{c_x - 1, c_y - 1});
+					attackedtile.emplace_back(vector<int>{c_x, c_y - 1});
+					attackedtile.emplace_back(vector<int>{c_x + 1, c_y - 1});
+					attackedtile.emplace_back(vector<int>{c_x + 2, c_y - 1});
+					attackedtile.emplace_back(vector<int>{c_x - 1, c_y - 2});
+					attackedtile.emplace_back(vector<int>{c_x, c_y - 2});
+					attackedtile.emplace_back(vector<int>{c_x + 1, c_y - 2});
+					attackedtile.emplace_back(vector<int>{c_x, c_y - 3});
+					break;
+				}
+				break;
+			case 2: //g bow
+				switch (p->direction){
+				case 1:
+					attackedtile.emplace_back(vector<int>{c_x, c_y + 1});
+					attackedtile.emplace_back(vector<int>{c_x, c_y + 2});
+					attackedtile.emplace_back(vector<int>{c_x, c_y + 3});
+					attackedtile.emplace_back(vector<int>{c_x, c_y + 4});
+					attackedtile.emplace_back(vector<int>{c_x, c_y + 5});
+					break;
+				case 2:
+					attackedtile.emplace_back(vector<int>{c_x-1, c_y});
+					attackedtile.emplace_back(vector<int>{c_x-2, c_y});
+					attackedtile.emplace_back(vector<int>{c_x-3, c_y});
+					attackedtile.emplace_back(vector<int>{c_x-4, c_y});
+					attackedtile.emplace_back(vector<int>{c_x-5, c_y});
+					break;
+				case 3:
+					attackedtile.emplace_back(vector<int>{c_x + 1, c_y});
+					attackedtile.emplace_back(vector<int>{c_x + 2, c_y});
+					attackedtile.emplace_back(vector<int>{c_x + 3, c_y});
+					attackedtile.emplace_back(vector<int>{c_x + 4, c_y});
+					attackedtile.emplace_back(vector<int>{c_x + 5, c_y});
+					break;
+				case 4:
+					attackedtile.emplace_back(vector<int>{c_x, c_y - 1});
+					attackedtile.emplace_back(vector<int>{c_x, c_y - 2});
+					attackedtile.emplace_back(vector<int>{c_x, c_y - 3});
+					attackedtile.emplace_back(vector<int>{c_x, c_y - 4});
+					attackedtile.emplace_back(vector<int>{c_x, c_y - 5});
+					break;
+				}
+				break;
+			case 3: //b shield
+				attackedtile.emplace_back(vector<int>{c_x - 1, c_y - 1});
+				attackedtile.emplace_back(vector<int>{c_x - 1, c_y});
+				attackedtile.emplace_back(vector<int>{c_x - 1, c_y + 1});
+				attackedtile.emplace_back(vector<int>{c_x, c_y + 1});
+				attackedtile.emplace_back(vector<int>{c_x + 1, c_y + 1});
+				attackedtile.emplace_back(vector<int>{c_x + 1, c_y});
+				attackedtile.emplace_back(vector<int>{c_x + 1, c_y - 1});
+				attackedtile.emplace_back(vector<int>{c_x, c_y - 1});
+				break;
+			case 4: //p magic
+				switch (p->direction) {
+				case 1:
+					attackedtile.emplace_back(vector<int>{c_x, c_y + 1});
+					attackedtile.emplace_back(vector<int>{c_x, c_y + 2});
+					attackedtile.emplace_back(vector<int>{c_x, c_y + 3});
+					break;
+				case 2:
+					attackedtile.emplace_back(vector<int>{c_x - 1, c_y});
+					attackedtile.emplace_back(vector<int>{c_x - 2, c_y});
+					attackedtile.emplace_back(vector<int>{c_x - 3, c_y});
+					break;
+				case 3:
+					attackedtile.emplace_back(vector<int>{c_x + 1, c_y});
+					attackedtile.emplace_back(vector<int>{c_x + 2, c_y});
+					attackedtile.emplace_back(vector<int>{c_x + 3, c_y});
+					break;
+				case 4:
+					attackedtile.emplace_back(vector<int>{c_x, c_y - 1});
+					attackedtile.emplace_back(vector<int>{c_x, c_y - 2});
+					attackedtile.emplace_back(vector<int>{c_x, c_y - 3});
+					break;
+				}
+				break;
+			}
+			//위 공격 범위 
+
+			//공격 범위에 있는 npc 데미지
+			for (auto& sc : sector)
+			{
+				if (clients[sc]._state != ST_INGAME) continue;
+				if (sc == c_id) continue;
+				if (is_pc(sc)) continue;
+				if (true == can_see(sc, c_id))
+				{
+					for (auto& at : attackedtile)
+					{
+						if (clients[sc].x == at[0] && clients[sc].y == at[1])
+						{
+							int result = clients[sc].damaged(clients[c_id].atk);
+							if (result != 0)
+							{
+								clients[c_id].exp += result;
+								clients[c_id].check_now_level();
+							}
+						}
+					}
+				}
+			}
+		}
+		else
+		{
+
 		}
 	}
 		break;
@@ -221,6 +424,14 @@ void do_npc_random_move(int npc_id)
 	case 2: if (y < (W_HEIGHT - 1)) y++; break;
 	case 3:if (y > 0) y--; break;
 	}
+
+	for (auto& sc : sector)
+	{
+		if (clients[sc].x == x && clients[sc].y == y)
+			return;
+	}
+	if (BlockCheck(x, y)) return;
+
 	npc.x = x;
 	npc.y = y;
 
@@ -307,6 +518,11 @@ void worker_thread(HANDLE h_iocp)
 				clients[client_id].x = 0;
 				clients[client_id].y = 0;
 				clients[client_id]._id = client_id;
+				clients[client_id].hp = 100;
+				clients[client_id].max_hp = 100;
+				clients[client_id].exp = 0;
+				clients[client_id].level = 1;
+				clients[client_id].atk = 10;
 				clients[client_id]._name[0] = 0;
 				clients[client_id]._prev_remain = 0;
 				clients[client_id]._socket = g_c_socket;
@@ -390,22 +606,115 @@ void worker_thread(HANDLE h_iocp)
 			delete ex_over;
 		}
 			break;
+		case OP_AUTO_HEAL: {
+			clients[key].hp += (clients[key].max_hp * 0.1f);
+			if (clients[key].hp > clients[key].max_hp)
+				clients[key].hp = clients[key].max_hp;
+
+			clients[key].send_change_stat();
+			TIMER_EVENT ev{ key, chrono::system_clock::now() + 5s, EV_AUTOHEAL, key };
+			timer_queue.push(ev);
+		}
+			break;
+			
 
 		}
 	}
 }
 
-
 void InitializeNPC()
 {
+	std::ifstream mapFile("level.txt");
+	if (!mapFile.is_open()) {
+		std::cerr << "파일을 열 수 없습니다!" << std::endl;
+		return;
+	}
+	std::string line;
+	int x = 0;
+	_level.lock();
+	while (std::getline(mapFile, line) && x < W_WIDTH) {
+		std::istringstream iss(line);
+		int y = 0;
+		int tile;
+
+		while (iss >> tile && y < W_HEIGHT) {
+			level_vec[x][y] = tile;
+			++y;
+		}
+		++x;
+	}
+	_level.unlock();
+
+	mapFile.close();
+
+
 	cout << "NPC intialize begin.\n";
 	for (int i = MAX_USER; i < MAX_USER + MAX_NPC; ++i)
 	{
-		clients[i].x = rand() % W_WIDTH;
-		clients[i].y = rand() % W_HEIGHT;
-		clients[i]._id = i;
-		sprintf_s(clients[i]._name, "NPC%d", i);
-		clients[i]._state = ST_INGAME;
+		int randx = 0;
+		int randy = 0;
+
+		if (MAX_USER <= i && i < MAX_USER + 30) //마을 NPC
+		{
+			while (1) {
+				randx = rand() % W_WIDTH;
+				randy = rand() % W_HEIGHT;
+
+				if (!(randx >= 850 && randx <= 1149 &&
+					randy >= 850 && randy <= 1149))
+					continue; //마을 위치
+
+				if (!BlockCheck(randx, randy))
+					break;
+			}
+			clients[i].visual = rand() % 2 + 8;
+			clients[i]._id = i;
+			clients[i].hp = 100;
+			clients[i].max_hp = 100;
+			clients[i].exp = 0;
+			clients[i].level = 1;
+			clients[i].x = randx;
+			clients[i].y = randy;
+			clients[i].atk = 10;
+			sprintf_s(clients[i]._name, "FAIRY", i);
+			clients[i]._state = ST_INGAME;
+		}
+		else
+		{
+			while (1) {
+				randx = rand() % W_WIDTH;
+				randy = rand() % W_HEIGHT;
+
+				if (randx >= 850 && randx <= 1149 &&
+					randy >= 850 && randy <= 1149)
+					continue; //마을 위치
+
+				if (!BlockCheck(randx, randy))
+					break;
+			}
+			clients[i].visual = rand() % 3+ 5;
+			clients[i]._id = i;
+			clients[i].hp = 100;
+			clients[i].max_hp = 100;
+			clients[i].exp = 0;
+			clients[i].level = 1;
+			clients[i].x = randx;
+			clients[i].y = randy;
+			switch (clients[i].visual)
+			{
+			case 5:
+				sprintf_s(clients[i]._name, "SANDMAN", i);
+				break;
+			case 6:
+				sprintf_s(clients[i]._name, "SKUL", i);
+				break;
+			case 7:
+				sprintf_s(clients[i]._name, "BIGEYE", i);
+				break;
+			}
+			clients[i]._state = ST_INGAME;
+		}
+
 
 		//생성 sector insert
 		clients[i].sec_id = InitSector(i, clients[i].x, clients[i].y);
@@ -443,6 +752,7 @@ void InitializeNPC()
 		lua_register(L, "API_get_x", API_get_x);
 		lua_register(L, "API_get_y", API_get_y);
 	}
+
 	cout << "NPC initialize end.\n";
 }
 
@@ -464,11 +774,23 @@ void do_timer() //timer 최적화
 			}
 			switch (ev.event_id)
 			{
-			case EV_RANDOM_MOVE:
+			case EV_RANDOM_MOVE: {
 				OVER_EXP* ov = new OVER_EXP;
 				ov->_comp_type = OP_NPC_MOVE;
 				ov->_ai_target_obj = ev.target_id;
 				PostQueuedCompletionStatus(h_iocp, 1, ev.obj_id, &ov->_over);
+			}
+				break;
+			//case EV_NPC_REVIVE: {
+
+			//}
+				break;
+			case EV_AUTOHEAL: {
+				OVER_EXP* ah = new OVER_EXP;
+				ah->_comp_type = OP_AUTO_HEAL;
+				ah->_ai_target_obj = ev.target_id;
+				PostQueuedCompletionStatus(h_iocp, 1, ev.obj_id, &ah->_over);
+			}
 				break;
 			}
 			continue;

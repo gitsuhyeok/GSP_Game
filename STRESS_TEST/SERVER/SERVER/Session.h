@@ -15,13 +15,24 @@ public:
 
 	mutex _s_lock;
 	S_STATE _state;
-	int _id;
+
 	SOCKET _socket;
-	short	x, y;
 	char	_name[NAME_SIZE];
 
 	int		_prev_remain;
 	int		_last_move_time;
+	int		_last_attack_time;
+
+	//session info
+	int		visual;
+	int		_id;
+	int		hp;
+	int		max_hp;
+	int		exp;
+	int		level;
+	short	x, y;
+
+	int atk; //공격력
 
 	//시야처리
 	unordered_set <int> _view_list;
@@ -49,7 +60,10 @@ public:
 	void send_add_player_packet(int c_id);
 	void send_chat_packet(int c_id, const char* mess);
 	void send_remove_player_packet(int c_id);
+	void send_change_stat();
 
+	int damaged(int dam);
+	void check_now_level();
 };
 
 extern array<SESSION, MAX_USER + MAX_NPC> clients;

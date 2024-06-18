@@ -1,7 +1,7 @@
 constexpr int PORT_NUM = 4000;
 constexpr int NAME_SIZE = 20;
 
-constexpr int BUF_SIZE = 200;
+constexpr int BUF_SIZE = 300;
 constexpr int CHAT_SIZE = 300;
 
 constexpr int MAX_USER = 10000;
@@ -9,6 +9,9 @@ constexpr int MAX_NPC = 200000;
 
 constexpr int W_WIDTH = 2000;
 constexpr int W_HEIGHT = 2000;
+
+constexpr int START_X = 850;
+constexpr int START_Y = 851;
 
 // Packet ID
 constexpr char CS_LOGIN = 0;
@@ -44,6 +47,14 @@ struct CS_CHAT_PACKET {
 	unsigned short size;			// 크기가 가변이다, mess가 작으면 size도 줄이자.
 	char	type;
 	char	mess[CHAT_SIZE];
+};
+
+struct CS_ATTACK_PACKET {
+	unsigned short size;			
+	char	type;
+	char	key;					//누른 버튼
+	char	direction;
+	unsigned	attack_time;
 };
 
 struct CS_TELEPORT_PACKET {			// 랜덤으로 텔레포트 하는 패킷, 동접 테스트에 필요

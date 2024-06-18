@@ -35,9 +35,14 @@ void SESSION::do_send(void* packet)
 void SESSION::send_login_info_packet()
 {
 	SC_LOGIN_INFO_PACKET p;
-	p.id = _id;
 	p.size = sizeof(SC_LOGIN_INFO_PACKET);
 	p.type = SC_LOGIN_INFO;
+	p.visual = visual;
+	p.id = _id;
+	p.hp = hp;
+	p.max_hp = max_hp;
+	p.exp = exp;
+	p.level = level;
 	p.x = x;
 	p.y = y;
 	do_send(&p);
@@ -46,9 +51,9 @@ void SESSION::send_login_info_packet()
 void SESSION::send_move_packet(int c_id)
 {
 	SC_MOVE_OBJECT_PACKET p;
-	p.id = c_id;
 	p.size = sizeof(SC_MOVE_OBJECT_PACKET);
 	p.type = SC_MOVE_OBJECT;
+	p.id = c_id;
 	p.x = clients[c_id].x;
 	p.y = clients[c_id].y;
 	p.move_time = clients[c_id]._last_move_time;
@@ -58,10 +63,11 @@ void SESSION::send_move_packet(int c_id)
 void SESSION::send_add_player_packet(int c_id)
 {
 	SC_ADD_OBJECT_PACKET add_packet;
-	add_packet.id = c_id;
 	strcpy_s(add_packet.name, clients[c_id]._name);
 	add_packet.size = sizeof(add_packet);
 	add_packet.type = SC_ADD_OBJECT;
+	add_packet.id = c_id;
+	add_packet.visual = clients[c_id].visual;
 	add_packet.x = clients[c_id].x;
 	add_packet.y = clients[c_id].y;
 	_vl.lock();
@@ -93,10 +99,46 @@ void SESSION::send_remove_player_packet(int c_id)
 	_vl.unlock();
 
 	SC_REMOVE_OBJECT_PACKET p;
-	p.id = c_id;
 	p.size = sizeof(p);
 	p.type = SC_REMOVE_OBJECT;
+	p.id = c_id;
 	do_send(&p);
+}
+
+void SESSION::send_change_stat()
+{
+	SC_STAT_CHANGE_PACKET p;
+	p.size = sizeof(SC_STAT_CHANGE_PACKET);
+	p.type = SC_STAT_CHANGE;
+	p.hp = hp;
+	p.max_hp = max_hp;
+	p.exp = exp;
+	p.level = level;
+	do_send(&p);
+}
+
+int SESSION::damaged(int dam)
+{
+	cout << _name << "가 " << dam << "의 피해를 입었습니다." << endl;
+	hp -= dam;
+	cout << "남은 체력 : " << hp << endl;
+	if (hp < 0)
+	{
+		hp = 0;
+		return level * level * 20;
+	}
+	return 0;
+}
+
+void SESSION::check_now_level()
+{
+	if (exp >= level * level * 100)
+	{
+		level += 1;
+		exp = 0;
+		cout << _name << "의 레벨이 올랐습니다. 현재 레벨 : " << level << endl;
+		send_change_stat();
+	}
 }
 
 

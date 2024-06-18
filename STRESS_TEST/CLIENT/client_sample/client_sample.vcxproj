@@ -145,9 +145,13 @@
     <Image Include="PinkLink.png" />
     <Image Include="RedLink.png" />
     <Image Include="SandMonster.png" />
+    <Image Include="SkulMonster.png" />
   </ItemGroup>
   <ItemGroup>
     <Font Include="cour.ttf" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="level.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
